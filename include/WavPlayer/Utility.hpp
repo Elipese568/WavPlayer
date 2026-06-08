@@ -1,0 +1,20 @@
+#pragma once
+
+#include <iostream>
+#include <fstream>
+
+#define address_as(v,t) ((t*)&v)
+#define address_to(v,t) ((t*)v)
+
+template<class T>
+T readOf(std::istream& stream){
+    T result;
+    stream.read(address_as(result, char), sizeof(T));
+    return result;
+}
+
+template<size_t Size>
+std::ostream& operator<<(std::ostream& os, char (&str)[Size])
+{
+    return os.write(str, Size);
+}
