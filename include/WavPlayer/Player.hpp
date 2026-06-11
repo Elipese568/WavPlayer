@@ -5,6 +5,7 @@
 #include <avrt.h>
 
 #include <thread>
+#include <chrono>
 #include <atomic>
 
 #include "ComObject.hpp"
@@ -26,6 +27,7 @@ private:
 
     std::atomic_bool m_isPlaying{false};
     std::atomic_bool m_exitThread{false};
+    std::atomic_int  m_currentBytePos{0};
 
     UINT32 m_blockSize{0};
 
@@ -34,7 +36,7 @@ private:
     void fillEventThreadProc();
 
 public:
-    Player(ComObject<IAudioClient> client, WavFile wav);
+    Player(ComObject<IAudioClient> client, WavFile&& wav);
     ~Player();
 
     void Play();
@@ -42,4 +44,6 @@ public:
     void Resume();
     void Stop();
     void Replay();
+
+    std::chrono::milliseconds GetCurrentProgress() const noexcept;
 };

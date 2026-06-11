@@ -53,6 +53,8 @@ WavFile WavFile::Open(const std::filesystem::path& path)
         else if(std::memcmp(chunk.id, "data", 4) == 0)
         {
             result.m_dataBegin = result.m_stream.tellg();
+            result.m_audioDataSize = chunk.size;
+            result.m_duration = std::chrono::milliseconds(static_cast<long long>(static_cast<double>(chunk.size) * 1000 / result.m_format->nAvgBytesPerSec));
             break;
         }
         else
@@ -96,4 +98,12 @@ void WavFile::ResetStream()
 {
     m_stream.clear();
     m_stream.seekg(m_dataBegin);
+}
+
+nocopy(std::chrono::milliseconds) WavFile::GetTotalDuration() const noexcept{
+    return this-> m_duration;
+}
+
+DWORD WavFile::GetAudioDataSize() const noexcept{
+    return this->m_audioDataSize;
 }

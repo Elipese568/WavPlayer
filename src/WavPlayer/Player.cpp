@@ -37,6 +37,7 @@ void Player::fillEventThreadProc()
             m_render->GetBuffer(frames, &buffer);
 
             auto filled = fillBuffer(&buffer, needByteCount);
+            m_currentBytePos += filled;
 
             m_render->ReleaseBuffer(filled / blockAlign, 0);
 
@@ -50,7 +51,7 @@ void Player::fillEventThreadProc()
     AvRevertMmThreadCharacteristics(taskHandle);
 }
 
-Player::Player(ComObject<IAudioClient> client, WavFile wav)
+Player::Player(ComObject<IAudioClient> client, WavFile&& wav)
     : m_client(std::move(client))
     , m_render(m_client.Service<IAudioRenderClient>())
     , m_wav(std::move(wav))
@@ -122,4 +123,8 @@ void Player::Replay()
 {
     Stop();
     Play();
+}
+
+std::chrono::milliseconds Player::GetCurrentProgress() const noexcept{
+    return std::chrono::milliseconds(static_cast<long long>(static_cast<double>(m_currentBytePos) * 1000 / m_wav.Format()->nAvgBytesPerSec));
 }

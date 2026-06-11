@@ -5,9 +5,12 @@
 #include <vector>
 #include <stdexcept>
 #include <filesystem>
+#include <chrono>
 
 #include <Windows.h>
 #include <mmreg.h>
+
+#include "Utility.hpp"
 
 struct WavChunkHead
 {
@@ -29,6 +32,8 @@ private:
 
     std::vector<BYTE> m_formatBuffer;
     WAVEFORMATEX* m_format = nullptr;
+    std::chrono::milliseconds m_duration;
+    DWORD m_audioDataSize;
 
     std::streampos m_dataBegin = 0;
 
@@ -46,6 +51,9 @@ public:
     WAVEFORMATEX* Format() noexcept;
 
     const WAVEFORMATEX* Format() const noexcept;
+
+    nocopy(std::chrono::milliseconds) GetTotalDuration() const noexcept;
+    DWORD GetAudioDataSize() const noexcept;
 
     std::istream& Stream() noexcept;
 

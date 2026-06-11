@@ -13,6 +13,8 @@
 
 #include <filesystem>
 
+#include <sstream>
+
 #include <stdio.h>
 #include <cstdio>
 #include <iostream>
@@ -26,20 +28,13 @@
 #include "Player.hpp"
 #include "WavFile.hpp"
 #include "Utility.hpp"
+#include "PlayerControllerGui.hpp"
 
 using ::ComUtility::ComObject;
 
 DEFINE_TRAIT(IMMDeviceEnumerator, MMDeviceEnumerator);
 
 constexpr auto streamMaxSize = std::numeric_limits<std::streamsize>::max();
-
-struct StreamState{
-    std::istream* self;
-    std::istream::pos_type currentPos;
-};
-
-#define getter(n, f, t) t n() {return f;}
-#define setter(n, f, t) void n(t arg) {f = arg;}
 
 HWND GetProgramHWND(){
     return GetConsoleWindow();
@@ -84,13 +79,32 @@ std::optional<std::filesystem::path> GetFilePicker(){
     return result;
 }
 
-int APIENTRY WinMain(
-    HINSTANCE hInstance,
-    HINSTANCE hPrevInstance,
-    LPSTR     cmd,
-    int       nCmdShow
+struct StartupArguments{
+    bool useGui;
+    HINSTANCE processInstance;
+    HINSTANCE previousProcessInstance;
+    int isCmdShow;
+};
+
+nocopy(StartupArguments) parseArguments(    
+    nocopy(HINSTANCE) hInstance,
+    nocopy(HINSTANCE) hPrevInstance,
+    nocopy(LPSTR)     cmdline,
+    int               nCmdShow
+){
+    std::stringstream ss(cmdline);
+    StartupArguments result{};
+    while(!ss.eof()){
+        std::string arg;
+        ss >> arg;
+        if(arg == "--gui" || arg == "-g") result.useGui = true;
+    }
+    return result;
+}
+
+int APIENTRY CliMain(
+    const StartupArguments& args
 ) {
-    auto comGuard = ComUtility::ComInitializeGuard();
     AllocConsole();
     
     FILE* fp;
@@ -144,6 +158,7 @@ int APIENTRY WinMain(
                       << "  resume  - Resume playback\n"
                       << "  stop    - Stop playback\n"
                       << "  replay  - Restart playback from the beginning\n"
+                      << "  cur     - Get current position of playback stream\n"
                       << "  quit    - Exit the program\n"
                       << "  /h      - Show this help message\n"
                       << std::endl;
@@ -153,6 +168,9 @@ int APIENTRY WinMain(
         else if(cmd == "pause") player.Pause();
         else if(cmd == "resume") player.Resume();
         else if(cmd == "replay") player.Replay();
+        else if(cmd == "cur"){
+            std::cout << player.GetCurrentProgress() << std::endl;
+        }
     }
 
     FAIL_COM_GUARD(r)
@@ -161,4 +179,24 @@ int APIENTRY WinMain(
 
     std::cin.get();
     return 0;
+}
+int APIENTRY WinMain(
+    HINSTANCE hInstance,
+    HINSTANCE hPrevInstance,
+    LPSTR     cmd,
+    int       nCmdShow
+) {
+    auto comGuard = ComUtility::ComInitializeGuard();
+
+    StartupArguments sa = parseArguments(hInstance, hPrevInstance, cmd, nCmdShow);
+    int exitCode;
+
+    if(sa.useGui){
+        //exitCode = GuiMain(sa); preversed
+    }
+    else{
+        exitCode = CliMain(sa);
+    }
+
+    return exitCode;
 }
