@@ -28,3 +28,11 @@ set_target_properties(WavPlayer PROPERTIES
 )
 
 set_target_properties(WavPlayer PROPERTIES WIN32_EXECUTABLE ON)
+
+if(MSVC)
+    foreach(flag_var
+        CMAKE_C_FLAGS CMAKE_C_FLAGS_DEBUG CMAKE_C_FLAGS_RELEASE
+        CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_DEBUG CMAKE_CXX_FLAGS_RELEASE)
+        string(REPLACE "/MD" "/MT" ${flag_var} "${${flag_var}}")
+    endforeach()
+endif()

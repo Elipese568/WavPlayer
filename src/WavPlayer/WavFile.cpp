@@ -17,10 +17,10 @@ WavFile WavFile::Open(const std::filesystem::path& path)
         throw std::runtime_error("Cannot open wav file.");
 
     auto wavHead = readOf<WavChunkHead>(result.m_stream);
-    std::cout << "--- Wav Head Data ---"            << '\n'
-            << "Chunk Id:     " << wavHead.id     << '\n'
-            << "Chunk Size:   " << wavHead.size   << '\n'
-            << "Chunk Format: " << wavHead.format << std::endl;
+    // std::cout << "--- Wav Head Data ---"            << '\n'
+    //         << "Chunk Id:     " << wavHead.id     << '\n'
+    //         << "Chunk Size:   " << wavHead.size   << '\n'
+    //         << "Chunk Format: " << wavHead.format << std::endl;
 
     if(std::memcmp(wavHead.id, "RIFF", 4) != 0)
         throw std::runtime_error("Not a RIFF file.");
@@ -28,12 +28,13 @@ WavFile WavFile::Open(const std::filesystem::path& path)
     if(std::memcmp(wavHead.format, "WAVE", 4) != 0)
         throw std::runtime_error("Not a WAVE file.");
 
+    char emptyFourCC[4] = {0};
     while(true)
     {
         auto chunk = readOf<FormatChunkHead>(result.m_stream);
-        std::cout << "--- Chunk Head Data ---"     << '\n'
-                  << "Chunk ID: "   << chunk.id   << '\n'
-                  << "Chunk Size: " << chunk.size << std::endl;
+        // std::cout << "--- Chunk Head Data ---"     << '\n'
+        //           << "Chunk ID: "   << chunk.id   << '\n'
+        //           << "Chunk Size: " << chunk.size << std::endl;
         if(std::memcmp(chunk.id, "fmt ", 4) == 0)
         {
             result.m_formatBuffer.resize(chunk.size,0);
@@ -53,19 +54,24 @@ WavFile WavFile::Open(const std::filesystem::path& path)
         else if(std::memcmp(chunk.id, "data", 4) == 0)
         {
             result.m_dataBegin = result.m_stream.tellg();
-            result.m_audioDataSize = chunk.size;
-            result.m_duration = std::chrono::milliseconds(static_cast<long long>(static_cast<double>(chunk.size) * 1000 / result.m_format->nAvgBytesPerSec));
-            break;
+            double seconds =
+                static_cast<double>(chunk.size) /
+                result.m_format->nAvgBytesPerSec;
+
+            result.m_duration =
+                std::chrono::milliseconds(static_cast<long long>(seconds * 1000.0));
+            
+            result.m_audioFrameCount = static_cast<unsigned long>(static_cast<double>(chunk.size) / result.m_format->nBlockAlign);
         }
         else
         {
             result.m_stream.seekg(chunk.size, std::ios::cur);
+            break;
         }
     }
 
     if(result.m_format == nullptr)
         throw std::runtime_error("fmt chunk not found.");
-
     return result;
 }
 
@@ -100,10 +106,14 @@ void WavFile::ResetStream()
     m_stream.seekg(m_dataBegin);
 }
 
-nocopy(std::chrono::milliseconds) WavFile::GetTotalDuration() const noexcept{
-    return this-> m_duration;
+std::chrono::milliseconds WavFile::GetTotalDuration() const noexcept{
+    return this->m_duration;
 }
 
 DWORD WavFile::GetAudioDataSize() const noexcept{
     return this->m_audioDataSize;
+}
+
+unsigned long WavFile::GetAudioFrameCount() const noexcept{
+    return this->m_audioFrameCount;
 }

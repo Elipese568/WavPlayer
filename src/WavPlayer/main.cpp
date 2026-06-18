@@ -86,7 +86,7 @@ struct StartupArguments{
     int isCmdShow;
 };
 
-nocopy(StartupArguments) parseArguments(    
+StartupArguments parseArguments(    
     nocopy(HINSTANCE) hInstance,
     nocopy(HINSTANCE) hPrevInstance,
     nocopy(LPSTR)     cmdline,
@@ -100,6 +100,13 @@ nocopy(StartupArguments) parseArguments(
         if(arg == "--gui" || arg == "-g") result.useGui = true;
     }
     return result;
+}
+
+int APIENTRY GuiMain(
+    const StartupArguments& args
+) {
+    PlayerControllerGui pcg{args.processInstance};
+    return 0;
 }
 
 int APIENTRY CliMain(
@@ -136,7 +143,7 @@ int APIENTRY CliMain(
               << "Bits/Sample:     " << format->wBitsPerSample  << '\n'
               << "Extra Info Size: " << format->cbSize          << std::endl;
 
-    START_COM_GUARD
+    START_COM_GUARD // client->Initialize
 
     ComUtility::CheckHR(client->Initialize(
         AUDCLNT_SHAREMODE_SHARED,
@@ -144,7 +151,7 @@ int APIENTRY CliMain(
         0, 0, format, nullptr 
     ));
 
-    Player player{std::move(client), std::move(file)};
+    Player player{std::move(client), false, std::move(file)};
 
     while(1){
         std::cout << "Input Command(/h for help): ";
@@ -169,13 +176,18 @@ int APIENTRY CliMain(
         else if(cmd == "resume") player.Resume();
         else if(cmd == "replay") player.Replay();
         else if(cmd == "cur"){
-            std::cout << player.GetCurrentProgress() << std::endl;
+            std::cout << std::format("{:%T}/{:%T}({} Fs / {} Fs)", 
+                player.GetCurrentProgress(), 
+                file.GetTotalDuration(), 
+                player.GetRenderedFrameCount(), 
+                file.GetAudioFrameCount()
+            ) << std::endl;
         }
     }
 
-    FAIL_COM_GUARD(r)
+    FAIL_COM_GUARD(r) // client->Initialize
         std::cout << "Error: " << r << std::endl;
-    END_COM_GUARD
+    END_COM_GUARD // client->Initialize
 
     std::cin.get();
     return 0;
@@ -192,7 +204,7 @@ int APIENTRY WinMain(
     int exitCode;
 
     if(sa.useGui){
-        //exitCode = GuiMain(sa); preversed
+        exitCode = GuiMain(sa);
     }
     else{
         exitCode = CliMain(sa);

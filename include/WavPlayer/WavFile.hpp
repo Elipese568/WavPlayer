@@ -34,6 +34,7 @@ private:
     WAVEFORMATEX* m_format = nullptr;
     std::chrono::milliseconds m_duration;
     DWORD m_audioDataSize;
+    unsigned long m_audioFrameCount;
 
     std::streampos m_dataBegin = 0;
 
@@ -52,8 +53,9 @@ public:
 
     const WAVEFORMATEX* Format() const noexcept;
 
-    nocopy(std::chrono::milliseconds) GetTotalDuration() const noexcept;
+    std::chrono::milliseconds GetTotalDuration() const noexcept;
     DWORD GetAudioDataSize() const noexcept;
+    unsigned long GetAudioFrameCount() const noexcept;
 
     std::istream& Stream() noexcept;
 
