@@ -10,6 +10,7 @@
 
 #include "ComObject.hpp"
 #include "WavFile.hpp"
+#include "PlayerCommand.hpp"
 #include "Utility.hpp"
 
 using ::ComUtility::ComObject;
@@ -17,6 +18,14 @@ using ::ComUtility::ComObject;
 class Player
 {
 private:
+    enum class PlayerState {
+        Stopped,
+        Playing,
+        Paused,
+        Eof,
+        Commanded
+    };
+
     ComObject<IAudioClient> m_client;
     ComObject<IAudioRenderClient> m_render;
     ComObject<IAudioClock> m_clock;
@@ -24,28 +33,32 @@ private:
     WavFile m_wav;
     bool m_eof;
 
-    std::thread m_eventThread;
+    std::jthread m_eventThread;
     HANDLE m_fillEvent{nullptr};
 
-    std::atomic_bool m_isPlaying{false};
-    std::atomic_bool m_exitThread{false};
+    std::atomic<PlayerState> m_state{PlayerState::Stopped};
+    std::atomic<PlayerState> m_prevState{PlayerState::Stopped};
+
     std::atomic<UINT64> m_currentFramePos{0};
+
+    std::atomic<UniPlayerCommand> m_command;
 
     UINT32 m_blockSize{0};
     DWORD m_realSampleRate;
 private:
     UINT32 fillBuffer(BYTE* pBuffer, UINT32 bytes);
-    void fillEventThreadProc();
-
+    void fillEventThreadProc(std::stop_token&);
+    void RequestState(PlayerState state);
 public:
     Player(ComObject<IAudioClient> client, bool isExclusiveMode, WavFile&& wav);
     ~Player();
 
-    void Play();
+    void StartPlay();
     void Pause();
     void Resume();
     void Stop();
     void Replay();
+    void Seek(UINT32 framePos);
 
     std::chrono::milliseconds GetCurrentProgress() const noexcept;
     DWORD GetRenderedFrameCount() const noexcept;

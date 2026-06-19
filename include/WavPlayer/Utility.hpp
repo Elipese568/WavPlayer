@@ -28,3 +28,6 @@ std::ostream& operator<<(std::ostream& os, char (&str)[Size])
 {
     return os.write(str, Size);
 }
+
+template<class... Ts>
+struct overloads : Ts... { using Ts::operator()...; };

@@ -102,12 +102,12 @@ StartupArguments parseArguments(
     return result;
 }
 
-int APIENTRY GuiMain(
-    const StartupArguments& args
-) {
-    PlayerControllerGui pcg{args.processInstance};
-    return 0;
-}
+// int APIENTRY GuiMain(
+//     const StartupArguments& args
+// ) {
+//     PlayerControllerGui pcg{args.processInstance};
+//     return 0;
+// }
 
 int APIENTRY CliMain(
     const StartupArguments& args
@@ -171,10 +171,15 @@ int APIENTRY CliMain(
                       << std::endl;
         }
         else if(cmd == "stop") player.Stop();
-        else if(cmd == "play") player.Play();
+        else if(cmd == "play") player.StartPlay();
         else if(cmd == "pause") player.Pause();
         else if(cmd == "resume") player.Resume();
         else if(cmd == "replay") player.Replay();
+        else if(cmd == "seek"){
+            UINT32 fpos;
+            std::cin >> fpos;
+            player.Seek(fpos);
+        }
         else if(cmd == "cur"){
             std::cout << std::format("{:%T}/{:%T}({} Fs / {} Fs)", 
                 player.GetCurrentProgress(), 
@@ -204,7 +209,7 @@ int APIENTRY WinMain(
     int exitCode;
 
     if(sa.useGui){
-        exitCode = GuiMain(sa);
+        //exitCode = GuiMain(sa); preversed
     }
     else{
         exitCode = CliMain(sa);
