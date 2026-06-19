@@ -4,6 +4,11 @@
 
 #include "PlayerCommand.hpp"
 
+class PlaceholderCommand : public PlayerCommand{
+public:
+    CommandType GetType() override;
+};
+
 class PlayCommand : public PlayerCommand{
 public:
     CommandType GetType() override;
@@ -19,6 +24,10 @@ public:
     CommandType GetType() override;
 };
 
+class ReplayCommand : public PlayerCommand{
+public:
+    CommandType GetType() override;
+};
 
 class SeekCommand : public PlayerCommand{
 private:
@@ -26,12 +35,16 @@ private:
 public:
     SeekCommand(unsigned long long pos);
     CommandType GetType() override;
-    const constexpr unsigned long long GetPos() const noexcept;
+    const constexpr unsigned long long GetPos() const noexcept{
+        return this->m_seekFramePos;
+    }
 };
 
-using UniPlayerCommand = std::variant<
+typedef std::variant<
     PlayCommand,
     PauseCommand,
     ResumeCommand,
-    SeekCommand
->;
+    SeekCommand,
+    ReplayCommand,
+    PlaceholderCommand
+> UniPlayerCommand;

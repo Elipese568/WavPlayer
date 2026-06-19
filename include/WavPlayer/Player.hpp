@@ -7,10 +7,12 @@
 #include <thread>
 #include <chrono>
 #include <atomic>
+#include <variant>
 
 #include "ComObject.hpp"
 #include "WavFile.hpp"
 #include "PlayerCommand.hpp"
+#include "PlayerCommands.hpp"
 #include "Utility.hpp"
 
 using ::ComUtility::ComObject;
@@ -41,14 +43,16 @@ private:
 
     std::atomic<UINT64> m_currentFramePos{0};
 
-    std::atomic<UniPlayerCommand> m_command;
+    std::atomic<std::shared_ptr<UniPlayerCommand>> m_command;
 
     UINT32 m_blockSize{0};
     DWORD m_realSampleRate;
 private:
     UINT32 fillBuffer(BYTE* pBuffer, UINT32 bytes);
     void fillEventThreadProc(std::stop_token&);
-    void RequestState(PlayerState state);
+    void RequestState(PlayerState state, bool forced);
+    void RevertState();
+    void SetCommand(UniPlayerCommand cmd);
 public:
     Player(ComObject<IAudioClient> client, bool isExclusiveMode, WavFile&& wav);
     ~Player();

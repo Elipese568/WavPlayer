@@ -30,21 +30,21 @@ void Player::fillEventThreadProc(std::stop_token& stopToken)
         m_client->GetCurrentPadding(&padding);
         switch(m_state.load()) {
             case PlayerState::Commanded: {
-                const UniPlayerCommand command = m_command.load();
+                auto command = m_command.load();
                 std::visit(
                     overloads {
                         [this, blockAlign](const PlayCommand& cmd){
                             // Prefill
                             BYTE* buffer;
                             m_render->GetBuffer(m_blockSize, &buffer);
-                            fillBuffer(buffer, m_blockSize * blockAlign);
+                            auto filled = fillBuffer(buffer, m_blockSize * blockAlign);
 
                             m_render->ReleaseBuffer(m_blockSize, 0);
-                            m_currentFramePos += m_blockSize;
+                            m_currentFramePos += filled / blockAlign;
 
                             // Start
                             m_client->Start();
-                            RequestState(PlayerState::Playing);
+                            RequestState(PlayerState::Playing, true);
                         },
                         [this, blockAlign](const SeekCommand& seekCmd){
                             auto pos = seekCmd.GetPos();
@@ -56,13 +56,38 @@ void Player::fillEventThreadProc(std::stop_token& stopToken)
 
                             m_wav.ResetStream();
                             m_wav.Stream().seekg(static_cast<std::streamoff>(pos) * blockAlign, std::ios::cur);
+                            
+                            if(m_prevState.load() == PlayerState::Playing){
+                                m_client->Start();
+                            }
                         },
                         [this](const PauseCommand& cmd){
-                            
+                            m_client->Stop();
+                            RequestState(PlayerState::Paused, true);
+                        },
+                        [this](const ResumeCommand& cmd){
+                            m_client->Start();
+                            RequestState(PlayerState::Playing, true);
+                        },
+                        [this](const ReplayCommand& cmd){
+                            m_client->Stop();
+                            m_client->Reset();
+
+                            m_wav.ResetStream();
+                            m_currentFramePos = 0;
+
+                            m_command = std::make_shared<UniPlayerCommand>(PlayCommand());
+                            RequestState(PlayerState::Commanded, true);
+                        },
+                        [this](const PlaceholderCommand& cmd){
+                            // placeholder
                         }
-                    }, command);
+                    }, *command);
+                RevertState();
+                break;
             }
             case PlayerState::Playing:{
+
                 int r = WaitForSingleObject(m_fillEvent, 0);
                 if (r == WAIT_OBJECT_0)
                 {
@@ -122,12 +147,7 @@ Player::Player(ComObject<IAudioClient> client, bool isExclusiveMode, WavFile&& w
     m_client->GetBufferSize(&m_blockSize);
     m_client->SetEventHandle(m_fillEvent);
 
-    m_eventThread = std::jthread(
-        [this](std::stop_token st)
-        {
-            this->fillEventThreadProc(st);
-        }
-    );
+    m_eventThread = std::jthread([this](std::stop_token st){this->fillEventThreadProc(st);});
 }
 
 Player::~Player()
@@ -143,31 +163,37 @@ Player::~Player()
     CloseHandle(m_fillEvent);
 }
 
-void Player::RequestState(Player::PlayerState s)
+void Player::RequestState(Player::PlayerState s, bool forced)
 {
     Player::PlayerState old = m_state.exchange(s);
-    m_prevState.store(old);
+    m_prevState.store(forced? s : old);
+}
+
+void Player::RevertState(){
+    m_state.store(m_prevState);
+}
+
+
+void Player::SetCommand(UniPlayerCommand cmd){
+    m_command = std::make_shared<UniPlayerCommand>(cmd);
+    RequestState(PlayerState::Commanded, false);
 }
 
 void Player::StartPlay()
 {
     m_wav.ResetStream();
     m_currentFramePos = 0;
-
-    m_command.store(PlayCommand());
-    RequestState(PlayerState::Commanded);
+    SetCommand(PlayCommand());
 }
 
 void Player::Pause()
 {
-    m_client->Stop();
-    RequestState(PlayerState::Paused);
+    SetCommand(PauseCommand());
 }
 
 void Player::Resume()
 {
-    m_client->Start();
-    RequestState(PlayerState::Playing);
+    SetCommand(ResumeCommand());
 }
 
 void Player::Stop()
@@ -176,17 +202,16 @@ void Player::Stop()
     m_client->Reset();
 
     m_wav.ResetStream();
-    RequestState(PlayerState::Stopped);
+    RequestState(PlayerState::Stopped, false);
 }
 
 void Player::Replay()
 {
-    Stop();
-    StartPlay();
+    SetCommand(ReplayCommand());
 }
 
 void Player::Seek(UINT32 framePos){
-
+    SetCommand(SeekCommand(framePos));
 }
 
 

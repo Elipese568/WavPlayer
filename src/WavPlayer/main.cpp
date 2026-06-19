@@ -28,7 +28,6 @@
 #include "Player.hpp"
 #include "WavFile.hpp"
 #include "Utility.hpp"
-#include "PlayerControllerGui.hpp"
 
 using ::ComUtility::ComObject;
 

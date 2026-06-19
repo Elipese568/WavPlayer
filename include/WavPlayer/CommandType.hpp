@@ -4,5 +4,7 @@ enum class CommandType{
     Seek,
     Play,
     Pause,
-    Resume
+    Resume,
+    Replay,
+    Undefined
 };
