@@ -130,9 +130,9 @@ int APIENTRY CliMain(
         std::cin.get();
         return 0;
     }
-    WavFile file = WavFile::Open(wavPath.value());
+    auto file = std::make_shared<WavFile>(WavFile::Open(wavPath.value()));
     
-    auto format = file.Format();
+    auto format = file->Format();
     std::cout << "--- Wav Format Data ---"                      << '\n'
               << "Format Tag:      " << format->wFormatTag      << '\n'
               << "Channels:        " << format->nChannels       << '\n'
@@ -150,7 +150,8 @@ int APIENTRY CliMain(
         0, 0, format, nullptr 
     ));
 
-    Player player{std::move(client), false, std::move(file)};
+    Player player{std::move(client), false};
+    player.SetSource(file);
 
     while(1){
         std::cout << "Input Command(/h for help): ";
@@ -182,9 +183,9 @@ int APIENTRY CliMain(
         else if(cmd == "cur"){
             std::cout << std::format("{:%T}/{:%T}({} Fs / {} Fs)", 
                 player.GetCurrentProgress(), 
-                file.GetTotalDuration(), 
+                file->Metadata().totalDuration, 
                 player.GetRenderedFrameCount(), 
-                file.GetAudioFrameCount()
+                file->Metadata().audioFrameCount
             ) << std::endl;
         }
     }

@@ -20,7 +20,7 @@ CommandType ReplayCommand::GetType(){
     return CommandType::Replay;
 }
 
-SeekCommand::SeekCommand(unsigned long long pos) : m_seekFramePos{pos} {}
+SeekCommand::SeekCommand(AudioFramePos pos) : m_seekFramePos{pos} {}
 
 CommandType SeekCommand::GetType(){
     return CommandType::Seek;

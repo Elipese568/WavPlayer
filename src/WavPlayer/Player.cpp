@@ -4,15 +4,9 @@
 #include <functional>
 #include <memory>
 
-UINT32 Player::fillBuffer(BYTE* pBuffer, UINT32 bytes)
+UINT32 Player::fillBuffer(BYTE* pBuffer, UINT32 frames)
 {
-    BYTE* buffer = pBuffer;
-
-    m_wav.Stream().read(
-        address_to(buffer, char),
-        bytes
-    );
-    return static_cast<UINT32>(m_wav.Stream().gcount());
+    return m_sourceStream->ReadFrames(pBuffer, frames);
 }
 
 void Player::fillEventThreadProc(std::stop_token& stopToken)
@@ -22,7 +16,7 @@ void Player::fillEventThreadProc(std::stop_token& stopToken)
 
     AvSetMmThreadPriority(taskHandle, AVRT_PRIORITY_HIGH);
 
-    auto blockAlign = m_wav.Format()->nBlockAlign;
+    auto blockAlign = m_source->Format()->nBlockAlign;
 
     while (!stopToken.stop_requested())
     {
@@ -40,7 +34,6 @@ void Player::fillEventThreadProc(std::stop_token& stopToken)
                             auto filled = fillBuffer(buffer, m_blockSize * blockAlign);
 
                             m_render->ReleaseBuffer(m_blockSize, 0);
-                            m_currentFramePos += filled / blockAlign;
 
                             // Start
                             m_client->Start();
@@ -51,11 +44,6 @@ void Player::fillEventThreadProc(std::stop_token& stopToken)
 
                             m_client->Stop();
                             m_client->Reset();
-
-                            m_currentFramePos.store(pos);
-
-                            m_wav.ResetStream();
-                            m_wav.Stream().seekg(static_cast<std::streamoff>(pos) * blockAlign, std::ios::cur);
                             
                             if(m_prevState.load() == PlayerState::Playing){
                                 m_client->Start();
@@ -73,8 +61,7 @@ void Player::fillEventThreadProc(std::stop_token& stopToken)
                             m_client->Stop();
                             m_client->Reset();
 
-                            m_wav.ResetStream();
-                            m_currentFramePos = 0;
+                            m_sourceStream->Seek(0);
 
                             m_command = std::make_shared<UniPlayerCommand>(PlayCommand());
                             RequestState(PlayerState::Commanded, true);
@@ -87,28 +74,24 @@ void Player::fillEventThreadProc(std::stop_token& stopToken)
                 break;
             }
             case PlayerState::Playing:{
-
                 int r = WaitForSingleObject(m_fillEvent, 0);
                 if (r == WAIT_OBJECT_0)
                 {
                     UINT32 frames = m_blockSize - padding;
-                    UINT32 needByteCount = frames * blockAlign;
 
                     BYTE* buffer;
                     m_render->GetBuffer(frames, &buffer);
 
-                    auto filled = fillBuffer(buffer, needByteCount);
+                    auto filled = fillBuffer(buffer, frames);
                     
-                    if (filled < needByteCount)
+                    if (filled < frames)
                     {
-                        memset(buffer + filled, 0, needByteCount - filled);
+                        memset(buffer + filled * blockAlign, 0, (frames - filled) * blockAlign);
                         m_state = PlayerState::Eof;
                     }
                     m_render->ReleaseBuffer(frames, 0);
                 
                     UINT64 curFrameCount = 0;
-
-                    m_currentFramePos = m_currentFramePos + filled / blockAlign;
                 }
                 break;
             }
@@ -124,11 +107,9 @@ void Player::fillEventThreadProc(std::stop_token& stopToken)
     AvRevertMmThreadCharacteristics(taskHandle);
 }
 
-Player::Player(ComObject<IAudioClient> client, bool isExclusiveMode, WavFile&& wav)
+Player::Player(ComObject<IAudioClient> client, bool isExclusiveMode)
     : m_client(std::move(client))
     , m_render(m_client.Service<IAudioRenderClient>())
-    , m_clock(m_client.Service<IAudioClock>())
-    , m_wav(std::move(wav))
 {
     m_fillEvent = CreateEvent(nullptr, false, false, nullptr);
 
@@ -139,9 +120,6 @@ Player::Player(ComObject<IAudioClient> client, bool isExclusiveMode, WavFile&& w
         m_realSampleRate = mixFormat->nSamplesPerSec;
 
         CoTaskMemFree(mixFormat);
-    }
-    else {
-        m_realSampleRate = m_wav.Format()->nSamplesPerSec;
     }
 
     m_client->GetBufferSize(&m_blockSize);
@@ -179,10 +157,18 @@ void Player::SetCommand(UniPlayerCommand cmd){
     RequestState(PlayerState::Commanded, false);
 }
 
+void Player::SetSource(std::shared_ptr<IAudioSource> source){
+    m_source = std::move(source);
+    m_sourceStream = m_source->CreateStream();
+}
+
+std::shared_ptr<IAudioSource> Player::GetSource() const {
+    return m_source;
+}
+
 void Player::StartPlay()
 {
-    m_wav.ResetStream();
-    m_currentFramePos = 0;
+    m_sourceStream->Seek(0);
     SetCommand(PlayCommand());
 }
 
@@ -200,8 +186,6 @@ void Player::Stop()
 {
     m_client->Stop();
     m_client->Reset();
-
-    m_wav.ResetStream();
     RequestState(PlayerState::Stopped, false);
 }
 
@@ -210,15 +194,14 @@ void Player::Replay()
     SetCommand(ReplayCommand());
 }
 
-void Player::Seek(UINT32 framePos){
+void Player::Seek(AudioFramePos framePos){
     SetCommand(SeekCommand(framePos));
 }
 
-
 std::chrono::milliseconds Player::GetCurrentProgress() const noexcept{
-    return std::chrono::milliseconds(static_cast<long long>(static_cast<double>(this->GetRenderedFrameCount()) / m_wav.GetAudioFrameCount() * m_wav.GetTotalDuration().count()));
+    return std::chrono::milliseconds(static_cast<long long>(static_cast<double>(this->GetRenderedFrameCount()) / m_source->Metadata().audioFrameCount * m_source->Metadata().totalDuration.count()));
 }
-DWORD Player::GetRenderedFrameCount() const noexcept{
+AudioFrameUnit Player::GetRenderedFrameCount() const noexcept{
     //return static_cast<DWORD>(static_cast<double>(this->m_currentFramePos) * (static_cast<double>(this->m_wav.Format()->nSamplesPerSec) / this->m_realSampleRate)); // Relative ratio
-    return this->m_currentFramePos;
+    return m_sourceStream->FramePosition();
 }

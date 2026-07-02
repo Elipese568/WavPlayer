@@ -3,6 +3,7 @@
 #include <variant>
 
 #include "PlayerCommand.hpp"
+#include "Typedefs.hpp"
 
 class PlaceholderCommand : public PlayerCommand{
 public:
@@ -31,11 +32,11 @@ public:
 
 class SeekCommand : public PlayerCommand{
 private:
-    unsigned long long m_seekFramePos;
+    AudioFramePos m_seekFramePos;
 public:
-    SeekCommand(unsigned long long pos);
+    SeekCommand(AudioFramePos pos);
     CommandType GetType() override;
-    const constexpr unsigned long long GetPos() const noexcept{
+    const constexpr AudioFramePos GetPos() const noexcept{
         return this->m_seekFramePos;
     }
 };

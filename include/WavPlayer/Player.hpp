@@ -30,10 +30,6 @@ private:
 
     ComObject<IAudioClient> m_client;
     ComObject<IAudioRenderClient> m_render;
-    ComObject<IAudioClock> m_clock;
-
-    WavFile m_wav;
-    bool m_eof;
 
     std::jthread m_eventThread;
     HANDLE m_fillEvent{nullptr};
@@ -41,9 +37,10 @@ private:
     std::atomic<PlayerState> m_state{PlayerState::Stopped};
     std::atomic<PlayerState> m_prevState{PlayerState::Stopped};
 
-    std::atomic<UINT64> m_currentFramePos{0};
-
     std::atomic<std::shared_ptr<UniPlayerCommand>> m_command;
+
+    std::shared_ptr<IAudioSource> m_source;
+    std::unique_ptr<IAudioStream> m_sourceStream;
 
     UINT32 m_blockSize{0};
     DWORD m_realSampleRate;
@@ -54,16 +51,19 @@ private:
     void RevertState();
     void SetCommand(UniPlayerCommand cmd);
 public:
-    Player(ComObject<IAudioClient> client, bool isExclusiveMode, WavFile&& wav);
+    Player(ComObject<IAudioClient> client, bool isExclusiveMode);
     ~Player();
+
+    void SetSource(std::shared_ptr<IAudioSource> source);
+    std::shared_ptr<IAudioSource> GetSource() const;
 
     void StartPlay();
     void Pause();
     void Resume();
     void Stop();
     void Replay();
-    void Seek(UINT32 framePos);
+    void Seek(AudioFramePos framePos);
 
     std::chrono::milliseconds GetCurrentProgress() const noexcept;
-    DWORD GetRenderedFrameCount() const noexcept;
+    AudioFrameUnit GetRenderedFrameCount() const noexcept;
 };

@@ -11,6 +11,8 @@
 #include <mmreg.h>
 
 #include "Utility.hpp"
+#include "IAudioStream.hpp"
+#include "IAudioSource.hpp"
 
 struct WavChunkHead
 {
@@ -25,22 +27,20 @@ struct FormatChunkHead
     DWORD size;
 };
 
-class WavFile
+class WavFile : public IAudioSource
 {
 private:
-    std::ifstream m_stream;
+    std::filesystem::path m_path;
 
     std::vector<BYTE> m_formatBuffer;
     WAVEFORMATEX* m_format = nullptr;
-    std::chrono::milliseconds m_duration;
-    DWORD m_audioDataSize;
-    unsigned long m_audioFrameCount;
+
+    AudioMetadata m_metadata;
 
     std::streampos m_dataBegin = 0;
 
-public:
     WavFile() = default;
-
+public:
     WavFile(const WavFile&) = delete;
     WavFile& operator=(const WavFile&) = delete;
 
@@ -49,19 +49,9 @@ public:
 
     static WavFile Open(const std::filesystem::path& path);
 
-    WAVEFORMATEX* Format() noexcept;
-
     const WAVEFORMATEX* Format() const noexcept;
+    
+    std::unique_ptr<IAudioStream> CreateStream();
 
-    std::chrono::milliseconds GetTotalDuration() const noexcept;
-    DWORD GetAudioDataSize() const noexcept;
-    unsigned long GetAudioFrameCount() const noexcept;
-
-    std::istream& Stream() noexcept;
-
-    const std::istream& Stream() const noexcept;
-
-    std::streampos DataBegin() const noexcept;
-
-    void ResetStream();
+    const AudioMetadata& Metadata() const;
 };

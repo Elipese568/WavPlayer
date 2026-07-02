@@ -2,21 +2,59 @@
 
 #include "WavFile.hpp"
 #include "Utility.hpp"
+#include "IAudioStream.hpp"
+#include "Typedefs.hpp"
 
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <cmath>
+
+namespace {
+    class WavAudioStream : public IAudioStream{
+    private:
+        std::ifstream m_stream;
+        std::streampos m_dataBegin;
+        WORD m_blockAlign;
+    public:
+        WavAudioStream(const std::filesystem::path& path, std::streampos dataBegin, WORD blockAlign)
+            : m_stream{path, std::ios::in | std::ios::binary},
+              m_dataBegin{dataBegin},
+              m_blockAlign{blockAlign} {}
+        
+        AudioFrameUnit ReadFrames(BYTE* buf, AudioFrameUnit frameCountNeeded){
+            UINT32 bytes = frameCountNeeded * m_blockAlign;
+            m_stream.read(address_to(buf, char), bytes);
+            return static_cast<UINT32>(m_stream.gcount());
+        }
+
+        AudioFramePos FramePosition() {
+            return static_cast<AudioFramePos>((m_stream.tellg() - m_dataBegin) / m_blockAlign);
+        }
+
+        void Seek(UINT32 frame){
+            m_stream.seekg(m_dataBegin, std::ios_base::beg);
+            m_stream.seekg(frame * m_blockAlign, std::ios_base::cur);
+        }
+
+        bool Eof(){
+            return m_stream.eof();
+        }
+    };
+}
 
 WavFile WavFile::Open(const std::filesystem::path& path)
 {
     WavFile result;
+    result.m_path = path;
+    result.m_metadata.name = path.filename().string();
 
-    result.m_stream.open(path, std::ios::in | std::ios::binary);
+    std::ifstream stream{path, std::ios::in | std::ios::binary};
 
-    if(!result.m_stream)
+    if(!stream)
         throw std::runtime_error("Cannot open wav file.");
 
-    auto wavHead = readOf<WavChunkHead>(result.m_stream);
+    auto wavHead = readOf<WavChunkHead>(stream);
     // std::cout << "--- Wav Head Data ---"            << '\n'
     //         << "Chunk Id:     " << wavHead.id     << '\n'
     //         << "Chunk Size:   " << wavHead.size   << '\n'
@@ -31,7 +69,7 @@ WavFile WavFile::Open(const std::filesystem::path& path)
     char emptyFourCC[4] = {0};
     while(true)
     {
-        auto chunk = readOf<FormatChunkHead>(result.m_stream);
+        auto chunk = readOf<FormatChunkHead>(stream);
         // std::cout << "--- Chunk Head Data ---"     << '\n'
         //           << "Chunk ID: "   << chunk.id   << '\n'
         //           << "Chunk Size: " << chunk.size << std::endl;
@@ -39,12 +77,12 @@ WavFile WavFile::Open(const std::filesystem::path& path)
         {
             result.m_formatBuffer.resize(chunk.size,0);
 
-            result.m_stream.read(
+            stream.read(
                 reinterpret_cast<char*>(result.m_formatBuffer.data()),
                 chunk.size
             );
 
-            if(!result.m_stream)
+            if(!stream)
                 throw std::runtime_error("Cannot read fmt chunk.");
 
             result.m_formatBuffer.resize(std::max(sizeof(WAVEFORMATEX), (decltype(sizeof(WAVEFORMATEX)))chunk.size));
@@ -53,19 +91,19 @@ WavFile WavFile::Open(const std::filesystem::path& path)
         }
         else if(std::memcmp(chunk.id, "data", 4) == 0)
         {
-            result.m_dataBegin = result.m_stream.tellg();
+            result.m_dataBegin = stream.tellg();
             double seconds =
                 static_cast<double>(chunk.size) /
                 result.m_format->nAvgBytesPerSec;
 
-            result.m_duration =
+            result.m_metadata.totalDuration =
                 std::chrono::milliseconds(static_cast<long long>(seconds * 1000.0));
             
-            result.m_audioFrameCount = static_cast<unsigned long>(static_cast<double>(chunk.size) / result.m_format->nBlockAlign);
+            result.m_metadata.audioFrameCount = static_cast<unsigned long>(static_cast<double>(chunk.size) / result.m_format->nBlockAlign);
         }
         else
         {
-            result.m_stream.seekg(chunk.size, std::ios::cur);
+            stream.seekg(chunk.size, std::ios::cur);
             break;
         }
     }
@@ -75,45 +113,14 @@ WavFile WavFile::Open(const std::filesystem::path& path)
     return result;
 }
 
-WAVEFORMATEX* WavFile::Format() noexcept
-{
+const WAVEFORMATEX* WavFile::Format() const noexcept {
     return m_format;
 }
-
-const WAVEFORMATEX* WavFile::Format() const noexcept
-{
-    return m_format;
+    
+std::unique_ptr<IAudioStream> WavFile::CreateStream() {
+    return std::make_unique<WavAudioStream>(m_path, m_dataBegin, Format()->nBlockAlign);
 }
 
-std::istream& WavFile::Stream() noexcept
-{
-    return m_stream;
-}
-
-const std::istream& WavFile::Stream() const noexcept
-{
-    return m_stream;
-}
-
-std::streampos WavFile::DataBegin() const noexcept
-{
-    return m_dataBegin;
-}
-
-void WavFile::ResetStream()
-{
-    m_stream.clear();
-    m_stream.seekg(m_dataBegin);
-}
-
-std::chrono::milliseconds WavFile::GetTotalDuration() const noexcept{
-    return this->m_duration;
-}
-
-DWORD WavFile::GetAudioDataSize() const noexcept{
-    return this->m_audioDataSize;
-}
-
-unsigned long WavFile::GetAudioFrameCount() const noexcept{
-    return this->m_audioFrameCount;
+const AudioMetadata& WavFile::Metadata() const {
+    return m_metadata;
 }
